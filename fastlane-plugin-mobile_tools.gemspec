@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.email         = 'yogesh_khandelwal@intuit.com'
 
   spec.summary       = 'fastlane plugin for mobile devops tooling'
-  # spec.homepage      = "https://github.com/<GITHUB_USERNAME>/fastlane-plugin-mobile_tools"
+  spec.homepage      = "https://github.com/ykhandelwal913/fastlane-plugin-mobile_tools"
   spec.license       = "MIT"
 
   spec.files         = Dir["lib/**/*"] + %w(README.md LICENSE)
