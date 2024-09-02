@@ -26,6 +26,7 @@ module Fastlane
           end
 
           create_xcframework(params)
+          
           remove_module_reference(params)
           sign_xcframework(params)
           zip_xcframework(params)
@@ -114,7 +115,7 @@ module Fastlane
       end
 
       def self.sign_xcframework(params)
-        return if params[:code_sign_identity].nil?
+        return if params[:code_sign_identity].nil? || params[:code_sign_identity] == false
       
         frameworks = params[:frameworks] || [nil]
       
@@ -132,8 +133,9 @@ module Fastlane
         end
       end
 
+      require 'tmpdir'
       def self.zip_xcframework(params)
-        return if params[:zip_xcframework].nil?
+        return if params[:zip_xcframework].nil? || params[:zip_xcframework] == false
 
         # Check if the zip utility is installed
         unless system("which zip > /dev/null 2>&1")
@@ -143,26 +145,57 @@ module Fastlane
 
         frameworks = params[:frameworks] || [nil]
 
-        frameworks.each do |framework|
-          xcframework = framework ? @xchelper.get_xcframework_path(framework) : @xchelper.xcframework_path
-          UI.message("▸ Zipping xcframework at path: #{xcframework}")
+        if params[:combine_all_zip]
+          Dir.mktmpdir do |tmpdir|
+            frameworks.each do |framework|
+              xcframework = framework ? @xchelper.get_xcframework_path(framework) : @xchelper.xcframework_path
+              UI.message("▸ Copying xcframework at path: #{xcframework} to tmp directory")
+              FileUtils.cp_r(xcframework, tmpdir)
+            end
+        
+            combined_zip_path = File.join(tmpdir, 'combined_xcframeworks.zip')
+            UI.message("▸ Listing all files in tmp directory")
+            UI.message(Dir.entries(tmpdir))
+        
+            Dir.chdir(tmpdir) do
+              command = "zip -r -X #{combined_zip_path} ."
+              UI.message("▸ Zipping all xcframeworks into one zip at path: #{combined_zip_path}")
+              UI.message(command)
+        
+              begin
+                Actions.sh(command)
+              rescue StandardError => e
+                UI.user_error!(e)
+              end
+            end
+        
+            output_directory = params[:output_directory] || '.'
+            final_zip_path = File.join(output_directory, 'combined_xcframeworks.zip')
+            FileUtils.mv(combined_zip_path, final_zip_path)
+            UI.message("▸ Moved combined zip to output directory at path: #{final_zip_path}")
+          end
+        else
+          frameworks.each do |framework|
+            xcframework = framework ? @xchelper.get_xcframework_path(framework) : @xchelper.xcframework_path
 
-          begin
-            zip_path = "#{xcframework}.zip"
-            FileUtils.rm_f(zip_path) if File.exist?(zip_path)
+            UI.message("▸ Zipping xcframework at path: #{xcframework}")
+            begin
+              zip_path = "#{xcframework}.zip"
+              FileUtils.rm_f(zip_path) if File.exist?(zip_path)
 
-            command = "zip -r -X #{zip_path} #{xcframework}"
-            UI.message(command)
+              command = "zip -r -X #{zip_path} #{xcframework}"
+              UI.message(command)
 
-            Actions.sh(command)
-          rescue StandardError => e
-            UI.user_error!(e)
+              Actions.sh(command)
+            rescue StandardError => e
+              UI.user_error!(e)
+            end
           end
         end
       end
 
       def self.delete_xcframework(params)
-        return if params[:delete_xcframework].nil?
+        return if params[:delete_xcframework].nil? || params[:delete_xcframework] == false
 
         frameworks = params[:frameworks] || [nil]
 
@@ -178,13 +211,11 @@ module Fastlane
         end
       end
 
-
-
       # #Fix compile problem go to xcframework and run this command (https://developer.apple.com/forums/thread/123253):
       # #The generated file includes many module references that Swift thinks are class references because it uses the class ahead of the module
       # #The problem is that in the Swiftinterface file, we have a class named ABCConnections, but the module is also called ABCConnections. 
       def self.remove_module_reference(params)
-        return if params[:ignore_module_reference].nil?
+        return if params[:ignore_module_reference].nil? || params[:ignore_module_reference] == false
       
         frameworks = params[:frameworks] || [nil]
       
@@ -355,7 +386,7 @@ module Fastlane
       end
 
       def self.authors
-        ['Boris Bielik', 'Alexey Alter-Pesotskiy']
+        ['ykhandelwal']
       end
 
       def self.details
@@ -458,8 +489,15 @@ module Fastlane
             description: 'Delete the xcframework after creation',
             optional: true,
             default_value: false
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :combine_all_zip,
+            description: 'Combine all xcframeworks into one zip file',
+            optional: true,
+            default_value: false
           )
         ]
+        
       end
 
       def self.category
